@@ -1,4 +1,4 @@
-import { ButtonItem, DropdownItem, PanelSection, PanelSectionRow, Router, ToggleField, findModuleChild } from "@decky/ui";
+import { ButtonItem, DropdownItem, Field, PanelSection, PanelSectionRow, Router, ToggleField, findModuleChild } from "@decky/ui";
 import { callable, definePlugin, routerHook } from "@decky/api";
 import { TranslationMemory, MemoryFile } from "./memory";
 import { SOURCE_LANGUAGES, TARGET_LANGUAGES, UI_LANGUAGES, languageOptions, setUiLanguage, steamLanguage, t } from "./i18n";
@@ -19,11 +19,12 @@ const getSettings = callable<[], Settings>("get_settings");
 const memoryGet = callable<[game: string], MemoryFile>("memory_get");
 const dataUsage = callable<[], { records_bytes: number; records_count: number; records_keep: number; memory_bytes: number; memory_games: number }>("data_usage");
 const clearRecords = callable<[], boolean>("clear_records");
+const pluginVersion = callable<[], string>("plugin_version");
 const clearMemory = callable<[], boolean>("clear_memory");
 const memoryPut = callable<[game: string, name: string, entries: Record<string, unknown>], boolean>("memory_put");
 const setSettingsBackend = callable<[patch: Partial<Settings>], Settings>("set_settings");
 
-type Settings = { enabled: boolean; source: string; target: string; profile: "auto" | "battery" | "balanced" | "quality"; debug: boolean; layer: boolean; translator: "smart" | "local" | "online"; reader: "modern" | "classic"; ui_language: string; fresh?: boolean; version?: number };
+type Settings = { enabled: boolean; source: string; target: string; profile: "auto" | "battery" | "balanced" | "quality"; debug: boolean; layer: boolean; translator: "smart" | "local" | "online"; reader: "modern" | "classic"; ui_language: string; developer?: boolean; fresh?: boolean; version?: number };
 // How much the translator may take: capture rate, share of the time for reading, how often the clean picture of the game is asked for
 const PROFILES = {
   // `burst`: the share of the time for reading in the 12 s after the picture has changed much (a new screen is read: the faster the better). The reader is in a thread of its own,
@@ -69,7 +70,7 @@ function readerCount(): number {
 }
 function megabytes(bytes: number): string { return bytes < 1e5 ? Math.max(1, Math.round(bytes / 1e3)) + " " + t("unit.kb") : (bytes / 1e6).toFixed(1) + " " + t("unit.mb"); }
 function activeProfile() { return settings.profile === "auto" ? PROFILES[autoLevel] : (PROFILES[settings.profile as Level] || PROFILES.balanced); }
-let settings: Settings = { enabled: false, source: "en", target: "uk", profile: "auto", debug: false, layer: true, translator: "smart", reader: "modern", ui_language: "auto", version: 7 };
+let settings: Settings = { enabled: false, source: "en", target: "uk", profile: "auto", debug: false, layer: true, translator: "smart", reader: "modern", ui_language: "auto", developer: false, version: 7 };
 
 const BASE = "http://127.0.0.1:47821";
 const FRAME_W = 1280;
@@ -114,11 +115,16 @@ const useComposition: ((level: number) => void) | undefined = findModuleChild((m
 function renderCover(item: { key: string; segment: any }, vp: { width: number; height: number }, mark: boolean) {
   const pad = Math.max(6, item.segment.rect.h * vp.height * 0.35);
   const [r, g, b] = item.segment.background;
+  // The patch never hides the picture of a button or an icon next to the text
+  const stopLeft = item.segment.stopLeft === undefined ? -Infinity : item.segment.stopLeft * vp.width + 1;
+  const stopRight = item.segment.stopRight === undefined ? Infinity : item.segment.stopRight * vp.width - 1;
+  const from = Math.max(item.segment.rect.x * vp.width - pad, stopLeft);
+  const to = Math.min((item.segment.rect.x + item.segment.rect.w) * vp.width + pad + 8, stopRight);
   return (
     <div key={"cover-" + item.key} data-plate={mark ? "1" : undefined} data-key={"cover-" + item.key} style={{
       position: "absolute", pointerEvents: "none",
-      left: item.segment.rect.x * vp.width - pad, top: item.segment.rect.y * vp.height - 5,
-      width: item.segment.rect.w * vp.width + 2 * pad + 8, height: item.segment.rect.h * vp.height + 10,
+      left: from, top: item.segment.rect.y * vp.height - 5,
+      width: to - from, height: item.segment.rect.h * vp.height + 10,
       background: `rgb(${r}, ${g}, ${b})`, borderRadius: 4,
     }} />
   );
@@ -734,6 +740,23 @@ function Content() {
     return () => clearInterval(timer);
   }, [s.running]);
   const update = (patch: Partial<Settings>) => { setCfg({ ...settings, ...patch }); void changeSetting(patch); };
+  // The tools of the developer (diagnostics, recordings, the numbers of the engine) are hidden from players: the version at the bottom, pressed
+  // seven times in a row, shows them (and hides them again)
+  const [version, setVersion] = useState("");
+  useEffect(() => { pluginVersion().then(setVersion).catch(() => { /* backend not there */ }); }, []);
+  const taps = useRef({ count: 0, at: 0 });
+  const tapVersion = () => {
+    const now = Date.now();
+    // a touch may come as a click and as an activation at once: one tap
+    if (now - taps.current.at < 80) return;
+    taps.current = { count: now - taps.current.at < 1500 ? taps.current.count + 1 : 1, at: now };
+    if (taps.current.count >= 7) {
+      taps.current.count = 0;
+      update(cfg.developer ? { developer: false, debug: false } : { developer: true });
+      refreshUsage();
+    }
+  };
+  const developer = cfg.developer === true;
   return (
     <>
       <PanelSection title="Live Translator">
@@ -755,9 +778,9 @@ function Content() {
           <DropdownItem label={t("translator.label")} rgOptions={[{ data: "smart", label: t("translator.smart") }, { data: "local", label: t("translator.local") }, { data: "online", label: t("translator.online") }]} selectedOption={cfg.translator} onChange={(o: any) => update({ translator: o.data })} />
         </PanelSectionRow>
         <PanelSectionRow><div style={{ fontSize: 11, opacity: 0.7, wordBreak: "break-word" }}>{t("translator.privacy")}</div></PanelSectionRow>
-        <PanelSectionRow><div style={{ fontSize: 12, wordBreak: "break-word" }}>{s.localInfo}{s.autoInfo ? <><br />{s.autoInfo}</> : null}</div></PanelSectionRow>
+        <PanelSectionRow><div style={{ fontSize: 12, wordBreak: "break-word" }}>{s.localInfo}{developer && s.autoInfo ? <><br />{s.autoInfo}</> : null}</div></PanelSectionRow>
         {s.running && cfg.layer && s.frame.source === "pipewire" ? <PanelSectionRow><div style={{ fontSize: 12, color: "#ffb74d", wordBreak: "break-word" }}>{t("layer.missing")}</div></PanelSectionRow> : null}
-        <PanelSectionRow><div style={{ fontSize: 12, wordBreak: "break-word" }}>{s.running ? t("status.found", { found: s.elements, shown: s.results.length }) : s.status}<br />{info}</div></PanelSectionRow>
+        <PanelSectionRow><div style={{ fontSize: 12, wordBreak: "break-word" }}>{developer && s.running ? <>{t("status.found", { found: s.elements, shown: s.results.length })}<br />{info}</> : s.status}</div></PanelSectionRow>
       </PanelSection>
       <PanelSection title={t("section.advanced")}>
         <PanelSectionRow>
@@ -766,8 +789,13 @@ function Content() {
         <PanelSectionRow>
           <DropdownItem label={t("language.label")} rgOptions={[{ data: "auto", label: t("language.auto") }, ...UI_LANGUAGES.map((l) => ({ data: l.code, label: l.name }))]} selectedOption={cfg.ui_language} onChange={(o: any) => { setUiLanguage(o.data); update({ ui_language: o.data }); }} />
         </PanelSectionRow>
+        {usage.memory_bytes > 0 ? (
+          <PanelSectionRow>
+            <ButtonItem layout="below" description={t("memory.desc", { games: usage.memory_games, size: megabytes(usage.memory_bytes) })} onClick={async () => { await clearMemory(); memory.load("", "", null); refreshUsage(); }}>{t("memory.clear")}</ButtonItem>
+          </PanelSectionRow>
+        ) : null}
       </PanelSection>
-      <PanelSection title={t("section.diag")}>
+      {developer ? <PanelSection title={t("section.diag")}>
         <PanelSectionRow>
           <ToggleField label={t("debug.label")} description={t("debug.desc")} checked={cfg.debug} onChange={(on: boolean) => update({ debug: on })} />
         </PanelSectionRow>
@@ -781,15 +809,17 @@ function Content() {
             <ButtonItem layout="below" description={t("records.desc", { count: usage.records_count, size: megabytes(usage.records_bytes), keep: usage.records_keep })} onClick={async () => { await clearRecords(); refreshUsage(); }}>{t("records.clear")}</ButtonItem>
           </PanelSectionRow>
         ) : null}
-        {usage.memory_bytes > 0 ? (
-          <PanelSectionRow>
-            <ButtonItem layout="below" description={t("memory.desc", { games: usage.memory_games, size: megabytes(usage.memory_bytes) })} onClick={async () => { await clearMemory(); memory.load("", "", null); refreshUsage(); }}>{t("memory.clear")}</ButtonItem>
-          </PanelSectionRow>
-        ) : null}
         <PanelSectionRow>
           <ButtonItem layout="below" disabled={!s.running} onClick={async () => { try { log("save: " + JSON.stringify(await (await fetch(`${BASE}/save`)).json())); } catch (e) { log("save failed: " + e); } }}>
             {t("saveFrame")}
           </ButtonItem>
+        </PanelSectionRow>
+      </PanelSection> : null}
+      <PanelSection>
+        <PanelSectionRow>
+          <Field focusable={true} bottomSeparator="none" onActivate={tapVersion} onClick={tapVersion}>
+            <div style={{ fontSize: 11, opacity: 0.5 }}>Live Translator {version}</div>
+          </Field>
         </PanelSectionRow>
       </PanelSection>
     </>
@@ -802,6 +832,7 @@ export default definePlugin(() => {
   // What the player left on last time: the settings, and the translator itself when it was on
   setUiLanguage("auto");
   void getSettings().then((saved) => {
+    if (!saved.developer) saved.debug = false;
     settings = saved;
     setUiLanguage(saved.ui_language);
     // A first start: the translation goes into the language of Steam (the game is read in English, or in Russian when Steam is English)

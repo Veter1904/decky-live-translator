@@ -1,6 +1,6 @@
 {
   "name": "decky-live-translator",
-  "version": "0.6.2",
+  "version": "0.6.5",
   "description": "Automatic, live translation of any game's on-screen text for Decky Loader (Steam Deck): reads the game's own frames, translates on the device and draws the translation over the original.",
   "type": "module",
   "scripts": {

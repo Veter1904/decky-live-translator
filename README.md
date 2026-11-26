@@ -62,7 +62,7 @@ The Google endpoint is the public web endpoint, not an official API with a key: 
 |---|---|---|
 | Memory of translations and glossary | `~/homebrew/settings/Live-Translator/memory/<Steam app id>.json` | 5000 texts per game, 40 games and 40 MB together, forgets texts seen once and not for 60 days; a button clears it (the glossary stays) |
 | Local translation models | `~/homebrew/data/Live-Translator/models/` | about 35 MB per language pair |
-| Recordings for the developer (only if you press the button) | `~/dlt-records/` | the last 12, 400 MB together, 7 days; a button deletes them |
+| Recordings for the developer (only if you press the button in the hidden *Diagnostics* section) | `~/dlt-records/` | the last 12, 400 MB together, 7 days; a button deletes them |
 | Log | `~/homebrew/logs/Live-Translator/` | one performance line every 30 s |
 | Screenshot and debug frame | `/tmp/` | removed when the helper stops |
 | Shared frame of the game (4 MB, in memory) and the log of the layer | `/dev/shm/dlt-<uid>/` | the frame stays until a reboot (a running game keeps it open, so it must not be removed); the log is emptied above 200 KB |
@@ -94,11 +94,11 @@ The engine reads in separate workers so that the game does not wait for it. A ne
 
 - *Nothing is translated:* the game must run, the toggle must be on, and the panel must be closed. For *Game frames*, start the game after turning it on.
 - *The plates are in the wrong place:* the plugin measures how the game is stretched on the screen by itself; if it is wrong after you change the scaling mode, turn the translator off and on.
-- *Logs:* `~/homebrew/logs/Live-Translator/`. The panel's *Diagnostics* section can show what the engine found and record 10 seconds for a bug report.
+- *Logs:* `~/homebrew/logs/Live-Translator/`. The hidden *Diagnostics* section (press the version at the bottom of the panel seven times) can show what the engine found and record 10 seconds for a bug report.
 
 ## Reporting problems
 
-Open an [issue](https://github.com/Veter1904/decky-live-translator/issues) with: the game (and whether it is a Proton/Vulkan game), the languages, the version of the plugin (Decky's plugin list shows it), what you saw and what you expected. A photo of the screen helps. The panel's *Diagnostics* section can record 10 seconds of the game for a bug report (the recording stays on your device; send it only if you wish: it holds frames of the game).
+Open an [issue](https://github.com/Veter1904/decky-live-translator/issues) with: the game (and whether it is a Proton/Vulkan game), the languages, the version of the plugin (Decky's plugin list shows it), what you saw and what you expected. A photo of the screen helps. The *Diagnostics* section is hidden: press the version at the bottom of the panel seven times to show it (and seven times to hide it). It can record 10 seconds of the game for a bug report (the recording stays on your device; send it only if you wish: it holds frames of the game).
 
 ## Building from source
 

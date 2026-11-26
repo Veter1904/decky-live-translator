@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.6.5
+
+- **A simpler panel for players:** the diagnostics (found blocks, recordings, saved frames) and the numbers of the engine are hidden. Press the version at the bottom of the panel seven times to show or hide them.
+- The button that clears the memory of translations moved to *Advanced*.
+
+## 0.6.4
+
+- **Translations no longer come out huge** over one-line hints on a busy picture: the size of the letters is limited by the box of the original line, and a longer translation is set a little smaller before the plate grows.
+- A button picture is found also when something dark lies just behind it (a hint over the scene of a game).
+
+## 0.6.3
+
+- **Button pictures stay visible.** A hint such as "(A) Select" or "Drop left: [LB]" gets a plate over the words only: the plugin looks for a mark right next to a one-line text (the picture of a button, an icon) and keeps the plate and its cover off it. Next to such a mark the translation grows to the free side, or is set a little smaller.
+
 ## 0.6.2
 
 - **The plugin no longer reads its own plates** (the frames of the screen hold them): a line whose letters and digits take turns ("Bawa no3nuin!", "6epe3H9", a Ukrainian plate read as English) is not text, and a new piece of text found inside a plate that is drawn over the game is the plate, not a text of the game. Before, such readings made new elements and new plates over paragraphs.

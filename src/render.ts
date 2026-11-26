@@ -6,9 +6,17 @@ export interface Region { x: number; y: number; w: number; h: number }
 export interface TranslatedSegment {
   original: string; translated: string; rect: Region; lineHeight: number;
   background: [number, number, number]; foreground: string; centered: boolean; shownAt?: number;
+  // Where a mark that is not text (the picture of a button, an icon) ends left of the text and begins right of it (fractions of the width): the plate stays off it
+  stopLeft?: number; stopRight?: number;
 }
 export interface TranslatorResult { original: string; translated: string; segments: TranslatedSegment[]; bounds?: Region }
 export interface ElementResult { id: number; role: string; result: TranslatorResult }
+
+// The height of the letters of one line is at most this share of its box; a translation up to this much wider than the original keeps its size, a longer one is
+// set smaller (not below this share) before the plate grows
+const ONE_LINE_SHARE = 0.76
+const NEAR_WIDTH = 1.2
+const NEAR_SHRINK = 0.84
 
 let measureContext: any
 
@@ -126,31 +134,51 @@ export function segmentStyle(segment: TranslatedSegment, viewport: { width: numb
     const originalWidth = segment.rect.w * viewport.width
     const left = segment.rect.x * viewport.width
     const centerX = left + originalWidth / 2
+    const textRight = left + originalWidth
+    // The free space between the text and a mark on each side (pixels); a mark right at the text decides which way the plate may grow
+    const gapLeft = segment.stopLeft === undefined ? undefined : Math.max(0, left - segment.stopLeft * viewport.width)
+    const gapRight = segment.stopRight === undefined ? undefined : Math.max(0, segment.stopRight * viewport.width - textRight)
+    const near = segment.rect.h * viewport.height * 1.3
+    const holdLeft = gapLeft !== undefined && gapLeft < near && (gapRight === undefined || gapRight >= gapLeft)
+    const holdRight = !holdLeft && gapRight !== undefined && gapRight < near
+    const centered = segment.centered && !holdLeft && !holdRight
 
     // One line of the original stays one line: the translation may grow sideways (as far as the picture goes),
     // so it does not wrap onto the line below, which is another piece of text
     const lines = linesOf(segment, viewport)
-    let room = segment.centered
+    let room = centered
         ? 2 * Math.min(centerX, viewport.width - centerX) - 16
-        : viewport.width - left - 8
+        : (holdRight ? textRight - 8 : viewport.width - left - 8)
     // ... and not over the piece of text next to it on the same row
     if(sides !== undefined){
         const leftEdge = sides.left === undefined ? 0 : sides.left * viewport.width + 4
         const rightEdge = sides.right === undefined ? viewport.width : sides.right * viewport.width - 4
-        room = segment.centered
+        room = centered
             ? Math.min(room, 2 * Math.min(centerX - leftEdge, rightEdge - centerX))
-            : Math.min(room, rightEdge - left)
+            : Math.min(room, holdRight ? textRight - leftEdge : rightEdge - left)
     }
     // A text in a panel of the interface may use the whole panel (the width to its right edge, the height to its bottom)
     const panelWidth = bounds === undefined ? 0 : (bounds.x + bounds.w) * viewport.width - left - 10
     const panelHeight = bounds === undefined ? 0 : (bounds.y + bounds.h) * viewport.height - segment.rect.y * viewport.height - 6
-    if(bounds !== undefined && !segment.centered){
+    if(bounds !== undefined && !centered && !holdRight){
         room = Math.min(room, Math.max(originalWidth, panelWidth))
     }
 
     // A paragraph keeps the width of the original (the translation is made to fit into it); one line may grow sideways
     const wide = Math.max(originalWidth * (lines === 1 ? 3.2 : 1.1), lines > 1 ? panelWidth : 0)
-    const maxWidth = Math.max(Math.min(140, Math.max(60, room)), Math.min(room, wide))
+    let maxWidth = Math.max(Math.min(140, Math.max(60, room)), Math.min(room, wide))
+    // The plate begins a little left of the text and ends a little right of it, but never on a mark
+    const marginLeft = gapLeft === undefined ? 8 : Math.max(0, Math.min(8, gapLeft - 2))
+    const marginRight = gapRight === undefined ? 8 : Math.max(0, Math.min(8, gapRight - 2))
+    const markLeft = segment.stopLeft === undefined ? undefined : segment.stopLeft * viewport.width + 2
+    const markRight = segment.stopRight === undefined ? undefined : segment.stopRight * viewport.width - 2
+    if(holdRight){
+        maxWidth = Math.min(maxWidth, textRight + marginRight - (markLeft ?? 0))
+    } else if(!centered && markRight !== undefined){
+        maxWidth = Math.min(maxWidth, markRight - (left - marginLeft))
+    } else if(centered && (markLeft !== undefined || markRight !== undefined)){
+        maxWidth = Math.min(maxWidth, 2 * Math.min(centerX - (markLeft ?? 0), (markRight ?? viewport.width) - centerX))
+    }
     // The plate reaches a little over the original on every side, but not into the text next to it: where two lines are close, the margin between them is shared
     const marginTop = above === undefined ? 4 : Math.max(0, Math.min(4, (segment.rect.y - above) * viewport.height / 2))
     const marginBottom = below === undefined ? 4 : Math.max(0, Math.min(4, (below - segment.rect.y - segment.rect.h) * viewport.height / 2))
@@ -164,7 +192,10 @@ export function segmentStyle(segment: TranslatedSegment, viewport: { width: numb
     }
 
     // The size of the original text; shrunk when the translation is longer than the original and would not fit
-    let size = autoFont ? Math.min(56, Math.max(12, segment.lineHeight * viewport.height * 1.02)) : fixedSize
+    // A line of letters is never as tall as its whole box: the height measured for a text with an outline on a busy picture can be the whole box, which makes
+    // the translation much bigger than the original
+    const letters = lines === 1 ? Math.min(segment.lineHeight, segment.rect.h * ONE_LINE_SHARE) : segment.lineHeight
+    let size = autoFont ? Math.min(56, Math.max(12, letters * viewport.height * 1.02)) : fixedSize
     // Text of the same kind (the same height of the original) is set in the same size: the translations are of different lengths, but the lines must not float
     if(sizeCap !== undefined){
         size = Math.min(size, sizeCap)
@@ -173,6 +204,11 @@ export function segmentStyle(segment: TranslatedSegment, viewport: { width: numb
     if(autoFont){
         const base = size
         if(lines === 1){
+            // A longer translation is first set a little smaller, so that the plate stays near the size of the original; only then it grows sideways
+            const near = textWidth(segment.translated, size)
+            if(near > originalWidth * NEAR_WIDTH){
+                size = Math.max(size * NEAR_SHRINK, size * originalWidth * NEAR_WIDTH / near)
+            }
             const wanted = textWidth(segment.translated, size)
             if(wanted > maxWidth){
                 size = Math.max(size * 0.62, size * maxWidth / wanted)
@@ -195,7 +231,7 @@ export function segmentStyle(segment: TranslatedSegment, viewport: { width: numb
         top: 'calc(' + (segment.rect.y * 100) + '% - ' + marginTop + 'px)',
         whiteSpace: singleLine ? 'nowrap' : 'normal',
         maxWidth: maxWidth + 'px',
-        minWidth: (Math.min(originalWidth, maxWidth) + 16) + 'px',
+        minWidth: Math.min(maxWidth, originalWidth + marginLeft + marginRight) + 'px',
         minHeight: originalHeight + 'px',
         maxHeight: autoFont ? allowed + 'px' : undefined,
         overflow: 'hidden',
@@ -204,15 +240,27 @@ export function segmentStyle(segment: TranslatedSegment, viewport: { width: numb
         background: 'rgba(' + r + ', ' + g + ', ' + b + ', ' + opacity + ')',
     }
 
-    if(segment.centered){
+    if(centered){
         style.left = ((segment.rect.x + segment.rect.w / 2) * 100) + '%'
         style.transform = 'translateX(-50%)'
         style.textAlign = 'center'
         style.justifyContent = 'center'
+    } else if(holdRight){
+        // a mark right after the text ("Drop left: [LB]"): the plate ends before it and grows to the left
+        style.right = 'calc(' + ((1 - segment.rect.x - segment.rect.w) * 100) + '% - ' + marginRight + 'px)'
+        style.textAlign = 'right'
+        style.justifyContent = 'flex-end'
     } else {
-        style.left = 'calc(' + (segment.rect.x * 100) + '% - 8px)'
+        style.left = 'calc(' + (segment.rect.x * 100) + '% - ' + marginLeft + 'px)'
         style.textAlign = 'left'
         style.justifyContent = 'flex-start'
+    }
+    // Next to a mark the inner margin of the plate is small too: the letters get the room
+    if(marginLeft < 8){
+        style.paddingLeft = Math.max(2, marginLeft) + 'px'
+    }
+    if(marginRight < 8){
+        style.paddingRight = Math.max(2, marginRight) + 'px'
     }
 
     return style

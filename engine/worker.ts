@@ -7,6 +7,7 @@ import { glossaryTranslation } from './vendor/uiwords'
 import { ocrStats, setReaderMode } from './vendor/ocr'
 import { abandonRemoteReader, initPpocr, ppocrStats, remoteStats, serveReader, setWordList, useRemoteReaders } from './vendor/ppocr'
 import { initEnv, makeCanvas } from './env'
+import { findStops } from './obstacles'
 
 const ctx: any = self
 
@@ -155,6 +156,21 @@ function applyFrame(buf: ArrayBuffer, w: number, h: number, masks: Array<[number
     video.videoHeight = h
 }
 
+/** The marks next to a text (the picture of a button of the pad, an icon): the page keeps the plates off them. Looked for in the picture without our plates. */
+function addStops(results: any[]): any[] {
+    const w = video.videoWidth, h = video.videoHeight
+    if (clean === null || w < 16 || h < 16 || clean.length !== w * h * 4) return results
+    for (const item of results) {
+        for (const segment of item.result.segments) {
+            const rect = { x: segment.rect.x * w, y: segment.rect.y * h, w: segment.rect.w * w, h: segment.rect.h * h }
+            const stops = findStops(clean, w, h, rect, segment.lineHeight * h, segment.background)
+            if (stops.left !== undefined) segment.stopLeft = stops.left / w
+            if (stops.right !== undefined) segment.stopRight = stops.right / w
+        }
+    }
+    return results
+}
+
 function start() {
     engine?.stop()
     engine = new ElementsEngine({
@@ -185,7 +201,7 @@ function start() {
                 ctx.postMessage({ type: 'translate', id, text, source, target })
             })
         },
-        onResults: (results: any) => ctx.postMessage({ type: 'results', results: JSON.parse(JSON.stringify(results)) }),
+        onResults: (results: any) => ctx.postMessage({ type: 'results', results: addStops(JSON.parse(JSON.stringify(results))) }),
         onStatus: (status: any) => ctx.postMessage({ type: 'status', status }),
         // The blocks the engine found (what Greenlight's debug view shows), only while the player wants to see them
         onFrames: (frames: any) => { if (settings.debug) ctx.postMessage({ type: 'frames', frames: JSON.parse(JSON.stringify(frames)) }) },

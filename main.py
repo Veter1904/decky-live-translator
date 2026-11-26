@@ -74,7 +74,7 @@ def remove_layer() -> None:
 
 # A new install translates on the device only ("local": nothing leaves it but the download of the model); "smart" and "online" send the recognised text to online translators and are chosen by the player.
 # `ui_language`: "auto" is the language of Steam.
-DEFAULT_SETTINGS = {"enabled": False, "source": "en", "target": "uk", "profile": "auto", "debug": False, "layer": True, "translator": "local", "reader": "modern", "ui_language": "auto", "version": 7}
+DEFAULT_SETTINGS = {"enabled": False, "source": "en", "target": "uk", "profile": "auto", "debug": False, "layer": True, "translator": "local", "reader": "modern", "ui_language": "auto", "developer": False, "version": 7}
 
 
 def _ssl_context() -> ssl.SSLContext:
@@ -226,6 +226,9 @@ class Plugin:
 
     def _settings_path(self) -> str:
         return os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "settings.json")
+
+    async def plugin_version(self) -> str:
+        return str(getattr(decky, "DECKY_PLUGIN_VERSION", ""))
 
     async def get_settings(self) -> dict:
         settings = dict(DEFAULT_SETTINGS)

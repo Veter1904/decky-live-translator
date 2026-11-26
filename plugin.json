@@ -1,0 +1,19 @@
+{
+  "name": "Live Translator",
+  "author": "Veter1904",
+  "flags": [
+    "root"
+  ],
+  "api_version": 1,
+  "publish": {
+    "tags": [
+      "translation",
+      "ocr",
+      "overlay",
+      "accessibility",
+      "utility"
+    ],
+    "description": "Automatic, live translation of any game's on-screen text. Reads the game's own frames, translates on the device (offline models) and draws the translation over the original. 13 interface languages.",
+    "image": "https://raw.githubusercontent.com/Veter1904/decky-live-translator/main/docs/store-image.png"
+  }
+}

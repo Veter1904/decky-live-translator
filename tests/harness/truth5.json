@@ -1,0 +1,7 @@
+{
+ "menu.png": ["Story Mode", "Challenges", "Game Options", "Quit"],
+ "saves.png": ["New", "Back"],
+ "title.png": ["Cave Story", "Press Z to begin", "navigate with Up Arrow and", "Down Arrow on the menu", "2020 NICALIS INC"],
+ "diff.png": ["Difficulty Level", "Easy", "Best choice for first-time players", "Start Game", "Cancel"],
+ "dialog.png": ["Kazuma: Sue?", "Kazuma: are you there?"]
+}

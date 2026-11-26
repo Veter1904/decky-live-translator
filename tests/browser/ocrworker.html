@@ -1,0 +1,39 @@
+<!doctype html><meta charset="utf-8"><title>reader worker test</title>
+<pre id="out" style="font:13px monospace"></pre>
+<script>
+const out = document.getElementById('out'); const log = (m) => { out.textContent += m + '\n' }
+;(async () => {
+  const base = location.origin
+  const code = await (await fetch(base + '/assets/engine-worker.js')).text()
+  const w = new Worker(URL.createObjectURL(new Blob([code], { type: 'application/javascript' })))
+  const ch = new MessageChannel()
+  w.onmessage = (e) => log('worker: ' + JSON.stringify(e.data))
+  w.onerror = (e) => log('worker onerror: ' + e.message)
+  const t0 = performance.now()
+  const ready = new Promise((res) => { ch.port1.onmessage = (e) => res(e.data) })
+  w.postMessage({ type: 'ocr-init', base, port: ch.port2 }, [ch.port2])
+  const first = await Promise.race([ready, new Promise((r) => setTimeout(() => r({ type: 'timeout' }), 60000))])
+  log('reader: ' + first.type + ' after ' + Math.round(performance.now() - t0) + ' ms')
+  if (first.type !== 'ready') { document.title = 'FAILED'; return }
+  const img = new Image(); img.src = base + '/tests/sets/gt1/game2.png'; await img.decode()
+  const c = document.createElement('canvas'); c.width = img.width; c.height = img.height
+  const cx = c.getContext('2d', { willReadFrequently: true }); cx.drawImage(img, 0, 0)
+  for (let round = 1; round <= 2; round++) {
+    const d = cx.getImageData(0, 0, c.width, c.height)
+    const answer = new Promise((res) => { ch.port1.onmessage = (e) => res(e.data) })
+    const t1 = performance.now()
+    ch.port1.postMessage({ op: round === 1 ? 'detect' : 'read', id: round, w: c.width, h: c.height, buf: d.data.buffer }, [d.data.buffer])
+    const a = await answer
+    log(`${round === 1 ? 'detect' : 'read'}: ${Math.round(performance.now() - t1)} ms (worker says ${a.ms} ms), ` + (a.boxes ? a.boxes.length + ' boxes' : a.result.lines.length + ' lines: ' + a.result.lines.slice(0, 4).map((l) => l.text).join(' | ')) + (a.error ? ' ERROR ' + a.error : ''))
+  }
+  // the thread of the page must stay free while the other worker reads
+  let lag = 0, last = performance.now()
+  const timer = setInterval(() => { const n = performance.now(); lag = Math.max(lag, n - last - 20); last = n }, 20)
+  const d = cx.getImageData(0, 0, c.width, c.height)
+  const answer = new Promise((res) => { ch.port1.onmessage = (e) => res(e.data) })
+  ch.port1.postMessage({ op: 'read', id: 9, w: c.width, h: c.height, buf: d.data.buffer }, [d.data.buffer])
+  await answer; clearInterval(timer)
+  log('longest stall of the page while the other worker read: ' + Math.round(lag) + ' ms')
+  document.title = 'DONE'
+})()
+</script>

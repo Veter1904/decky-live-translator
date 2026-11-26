@@ -1,0 +1,19 @@
+node_modules/
+dist/
+out/
+*.zip
+.pnpm-store/
+.cache/
+tests/records/
+tests/harness/*.cjs
+!tests/harness/build.cjs
+tests/preview/mapping/
+tests/preview/preview.js
+
+# frames of commercial games used to test the engine (kept on the author's machine, not published)
+tests/sets/
+tests/frames/
+
+# one-off patch scripts and the frames made by tests/synth/make_window_frames.py (they are made from a frame of a game, which is not published)
+scripts/patch_*.py
+tests/synth/frames/

@@ -1,0 +1,4 @@
+{
+ "settings.png": ["General", "Graphics", "Data", "Controls", "Mouse", "Mouse+Keyboard", "Keyboard Options", "Mouse Movement: Off", "Change Key Bindings", "Sound", "SFX", "Music", "Censor Chat: On", "Colorblind Text: Off"],
+ "note.png": ["All the power in the facility comes from the", "power core, but in case of a shutdown we have", "special fuses to use so we can power certain", "parts of the facility that the backup", "generators don't reach.", "They usually stay in the breaker rooms in a", "slot, they are quite safe to pick up and you can", "use them in any empty fuze slot you can find.", "CLOSE", "Ammo"]
+}
